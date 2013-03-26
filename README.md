@@ -1,4 +1,2 @@
-MP710-Control-Panel
-===================
-
-MP710 Control Panel
+﻿MP710 Control Panel
+Панель управления с помощью MP710
