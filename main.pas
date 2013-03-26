@@ -24,7 +24,13 @@ type
     Enabled: String;
     Disabled: String;
   end;
+  TIcons = record
+    Enabled: TPicture;
+    Disabled: TPicture;
+  end;
   TItemData = record
+    AObject: TImage;
+    AIcons: TIcons;
     Size: TSize;
     Title: String;
     ImageName: TImageName;
@@ -58,14 +64,13 @@ type
     AGroups: array of TGroupMode;
     cfg: TINIFile;
     sInfoBUFF: TStringList;
-    function GetUID(var UID: Integer): Boolean;
-    procedure SetItem (Ctrl: TControl; Mode: Boolean);
+    procedure SetItem(Idx: Integer; Value: Boolean; SetHW: Boolean = False);
   public
-    CurrentDevice: TJvHidDevice;
-    Devices: TJvHidMP710ControllersList;
     procedure sInfo(const msg: String); overload;
     procedure sInfo(const msg: String; const sec: Integer); overload;
-   end;
+    procedure SetItems (const ID: DWORD);
+    procedure SetItemsOff (const ID: DWORD);
+  end;
 
 var
   frmMain: TfrmMain;
@@ -100,9 +105,15 @@ implementation
 {$R *.dfm}
 
 procedure TfrmMain.FormClose(Sender: TObject; var Action: TCloseAction);
+var
+  i: Integer;
 begin
+  for i := Low(AItems) to High(AItems) do begin
+    if Assigned(AItems[i].AObject) then AItems[i].AObject.Free;
+    if Assigned(AItems[i].AIcons.Enabled) then AItems[i].AIcons.Enabled.Free;
+    if Assigned(AItems[i].AIcons.Disabled) then AItems[i].AIcons.Disabled.Free;
+  end;
   cfg.Free;
-  Devices.Free;
   sInfoBUFF.Free;
 end;
 
@@ -114,41 +125,16 @@ var
   S, fn: String;
   BWidth, BHeight: Real;
   PNG: TPNGImage;
+  img: TPicture;
 begin
-  fn := IncludeTrailingPathDelimiter(ExtractFilePath(Application.ExeName)) +
-    ChangeFileExt(ExtractFileName(Application.ExeName), '.ini');
-  if FileExists(fn) then
-    cfg := TINIFile.Create(fn)
-  else begin
-    cfg := TINIFile.Create(fn);
-    // Save Default values
-    // General
-    cfg.WriteString(sMain, 'Descr', 'Основные настройки');
-    cfg.WriteString(sMain, iFullScreen, 'Запускать в полноэкранном режиме');
-    cfg.WriteString(sMain, iImgLoc, 'Папка с изображениями кнопок');
-    cfg.WriteString(sMain, iWidth, 'Количество столбцов');
-    cfg.WriteString(sMain, iHeight, 'Количество строк');
-    // Groups
-    cfg.WriteString(sGrps, 'Descr', 'Группы элементов; n - номер группы');
-    cfg.WriteString(sGrps, iGrp + 'n', 'gmFree - Независимое переключение; gmSame - Вся группа переключается одинаково; gmSingleOn - Остальные элементы группы всегда включены; gmSingleOff - Остальные элементы группы всегда отключены');
-    // Element
-    cfg.WriteString(sItem+'n', 'Descr', 'Группы элементов; n - номер элелмента');
-    cfg.WriteString(sItem+'n', iTitle, 'Наименование элемента');
-    cfg.WriteString(sItem+'n', iDevID, 'Идентификатор MP710');
-    cfg.WriteString(sItem+'n', iDevPort, 'Порт MP710');
-    cfg.WriteString(sItem+'n', iGroup, 'Идентификатор группы (по умолчанию 0)');
-    cfg.WriteString(sItem+'n', iPDevID, 'Идентификатор MP710 для предварительного переключения');
-    cfg.WriteString(sItem+'n', iPDevPort, 'Порт MP710 для предварительного переключения');
-    cfg.WriteString(sItem+'n', iPDevPortS, 'Состоянение порта MP710 для предварительного переключения');
-    cfg.WriteString(sItem+'n', iPDevPortT, 'Время предварительного переключения');
-    cfg.WriteString(sItem+'n', iLeft, 'Номер столбца');
-    cfg.WriteString(sItem+'n', iTop, 'Номер строки');
-    cfg.WriteString(sItem+'n', iHSpan, 'Объединение ячеек по горизонтали');
-    cfg.WriteString(sItem+'n', iVSpan, 'Объединение ячеек по вертикали');
-    cfg.WriteString(sItem+'n', iImgE, 'Изображения состояния включено');
-    cfg.WriteString(sItem+'n', iImgD, 'Изображение состояние отключено');
-  end;
-
+  {$IFDEF DEBUG}
+    fn := IncludeTrailingPathDelimiter(ExpandFileName(ExtractFilePath(Application.ExeName) +
+      '\..\..')) + ChangeFileExt(ExtractFileName(Application.ExeName), '.ini');
+  {$ELSE}
+    fn := IncludeTrailingPathDelimiter(ExtractFilePath(Application.ExeName)) +
+      ChangeFileExt(ExtractFileName(Application.ExeName), '.ini');
+  {$ENDIF}
+  cfg := TINIFile.Create(fn);
 
   FullScreen := cfg.ReadBool(sMain, iFullSCreen, False);
   if FullScreen then begin
@@ -164,17 +150,23 @@ begin
     Width       := Screen.Width;
     Height      := Screen.Height;
   end;
-  {$IFDEF DEBUG}
-  cfg.WriteDateTime('DEBUG', 'DATE', now);
-  cfg.WriteBool(sMain, iFullSCreen, FullScreen);
-  {$ENDIF}
+  // Read main settings
   DSize.Columns := cfg.ReadInteger(sMain, iWidth, 4);
   DSize.Rows := cfg.ReadInteger(sMain, iHeight, 4);
   {$IFDEF DEBUG}
-  cfg.WriteInteger(sMain, iWidth, DSize.Columns);
-  cfg.WriteInteger(sMain, iHeight, DSize.Rows);
+    cfg.WriteDateTime('DEBUG', 'DATE', now);
+    cfg.WriteBool(sMain, iFullSCreen, FullScreen);
+    cfg.WriteInteger(sMain, iWidth, DSize.Columns);
+    cfg.WriteInteger(sMain, iHeight, DSize.Rows);
+    ImgLoc := IncludeTrailingPathDelimiter(
+      cfg.ReadString(sMain, iImgLoc, IncludeTrailingPathDelimiter(
+      ExpandFileName(ExtractFilePath(Application.ExeName) +
+      '\..\..')) + 'Images'));
+  {$ELSE}
+    ImgLoc := IncludeTrailingPathDelimiter(
+      cfg.ReadString(sMain, iImgLoc, IncludeTrailingPathDelimiter(
+      ExtractFilePath(Application.ExeName)) + 'Images'));
   {$ENDIF}
-  ImgLoc := IncludeTrailingPathDelimiter(cfg.ReadString(sMain, iImgLoc, IncludeTrailingPathDelimiter(ExtractFilePath(Application.ExeName)) + 'Images'));
 
   // Read INI File
   ItemList := TStringList.Create;
@@ -234,7 +226,24 @@ begin
   BWidth := pDevices.ClientWidth / DSize.Columns;
   BHeight := pDevices.ClientHeight / DSize.Rows;
   for i := 1 to High(AItems) do begin
-    with TImage.Create(frmMain) do begin
+    AItems[i].AObject := TImage.Create(frmMain);
+
+    with AItems[i].AIcons do begin
+      Enabled := TPicture.Create;
+      Disabled := TPicture.Create;
+      try
+        Enabled.LoadFromFile(ImgLoc + AItems[i].ImageName.Enabled);
+      finally
+        sInfo('Fail image to load: ' + ImgLoc + AItems[i].ImageName.Enabled);
+      end;
+      try
+        Disabled.LoadFromFile(ImgLoc + AItems[i].ImageName.Disabled);
+      finally
+        sInfo('Fail image to load: ' + ImgLoc + AItems[i].ImageName.Disabled);
+      end;
+    end;
+
+    with AItems[i].AObject do begin
       Left := Round(AItems[i].Size.Left * BWidth);
       Top := Round(AItems[i].Size.Top * BHeight);
       Width := Round(AItems[i].Size.Width * BWidth);
@@ -256,13 +265,21 @@ end;
 
 procedure TfrmMain.ButtonClick(Sender: TObject);
 var
-  n, i: Integer;
+  n, i, g: Integer;
   btn: TImage;
   chk: Boolean;
+  Val: Boolean;
+  ID, PORT: Integer;
 begin
   btn := Sender as TImage;
   n := (Sender as TControl).Tag;
-  case AGroups[AItems[n].GroupID] of
+  g := AItems[n].GroupID;
+
+  ID := AItems[n].DeviceID;
+  PORT := AItems[n].DevicePort;
+  GetMP710PORTkkEnabled(ID, PORT, VAL);
+
+{  case AGroups[AItems[n].GroupID] of
     gmFree, gmSame: SetItem(Sender as TControl, not AItems[n].Enabled);
     gmSingleOn: SetItem(Sender as TControl, True);
     gmSingleOff: SetItem(Sender as TControl, False);
@@ -276,20 +293,45 @@ begin
         gmSingleOn: SetItem(pDevices.Controls[i], False);
         gmSingleOff: SetItem(pDevices.Controls[i], True);
       end;
+  end;}
+  case AGroups[g] of
+    gmFree, gmSame:
+      Val := not Val;
+    gmSingleOn:
+      Val := True;
+    gmSingleOff:
+      Val := False;
   end;
-      //Devices.MP710PORTkkEnabled[732, StrToIntDef((Controls[i] as TButton).Hint, -1)] := False;
+  SetItem(n, Val, True);
+
+  for i := Low(AItems) to High(AItems) do begin
+    if (i <> n) and (AItems[i].GroupID = g) then
+      case AGroups[g] of
+        //gmFree,
+        gmSame:
+          SetItem(i, Val, True);
+        gmSingleOn, gmSingleOff:
+          SetItem(i, not Val, True);
+      end;
+  end;
 end;
-procedure TfrmMain.SetItem(Ctrl: TControl; Mode: Boolean);
+procedure TfrmMain.SetItem(Idx: Integer; Value: Boolean; SetHW: Boolean = False);
+var
+  ID: DWORD;
+  N: WORD;
+  Val: Boolean;
 begin
-  if Mode then begin
-    AItems[Ctrl.Tag].Enabled := True;
-    if FileExists(ImgLoc + AItems[Ctrl.Tag].ImageName.Enabled) then
-      (Ctrl as TImage).Picture.LoadFromFile(ImgLoc + AItems[Ctrl.Tag].ImageName.Enabled);
-  end else begin
-    AItems[Ctrl.Tag].Enabled := False;
-    if FileExists(ImgLoc + AItems[Ctrl.Tag].ImageName.Disabled) then
-      (Ctrl as TImage).Picture.LoadFromFile(ImgLoc + AItems[Ctrl.Tag].ImageName.Disabled);
+  if SetHW then begin
+    SetMP710PORTkkEnabled(AItems[Idx].DeviceID, AItems[Idx].DevicePort, Val);
+    GetMP710PORTkkEnabled(AItems[Idx].DeviceID, AItems[Idx].DevicePort, Val);
   end;
+
+  if Value then
+    if Assigned(AItems[Idx].AObject.Picture) and Assigned(AItems[Idx].AIcons.Enabled) then
+      AItems[Idx].AObject.Picture.Assign(AItems[Idx].AIcons.Enabled)
+  else
+    if Assigned(AItems[Idx].AObject.Picture) and Assigned(AItems[Idx].AIcons.Disabled) then
+      AItems[Idx].AObject.Picture.Assign(AItems[Idx].AIcons.Disabled);
 end;
 
 // System Messages
@@ -340,28 +382,29 @@ begin
   end;
 end;
 
-function TfrmMain.GetUID(var UID: Integer): Boolean;
+procedure TfrmMain.SetItems(const ID: DWORD);
 var
-  BUFO, BUFI : array [0..9] of byte;
   i: Integer;
+  Val, n: Boolean;
 begin
-  Result := False;
-  UID := -1;
+  for i := Low(AItems) to High(AItems) do
+    if AItems[i].DeviceID = ID then begin
+      n := GetMP710PORTkkEnabled(ID, AItems[i].DevicePort, Val);
+      if n then
+        SetItem(i, Val, False)
+      else
+        SetItem(i, False, False);
+    end;
+end;
 
-  BUFO[1] := $1D;
-  i := 3;
-
-  while (Not Result) and (i>0) do begin
-    if CurrentDevice.SetFeature(BUFO[0], 9) then
-      if CurrentDevice.GetFeature(BUFI[0], 9) then
-        if BUFI[1] = $1D then begin
-          Result := True;
-          UID := BUFI[5] shl 24 + BUFI[6] shl 16 + BUFI[7] shl 8 + BUFI[8];
-        end else begin
-          Result := False;
-          sInfo ('Ошибка чтения уникального номера устройства');
-        end;
-  end;
+procedure TfrmMain.SetItemsOff(const ID: DWORD);
+var
+  i: Integer;
+  Val, n: Boolean;
+begin
+  for i := Low(AItems) to High(AItems) do
+    if AItems[i].DeviceID = ID then
+      SetItem(i, False, False);
 end;
 
 end.

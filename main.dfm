@@ -38,6 +38,7 @@ object frmMain: TfrmMain
       Top = 128
       Width = 105
       Height = 105
+      OnClick = ButtonClick
     end
   end
   object pControls: TPanel

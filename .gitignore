@@ -7,6 +7,8 @@ __history
 *.map
 *.exe
 *.dll
+*.ini
 bin/*
 Win32/*
 res/*
+Images/*
