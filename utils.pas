@@ -3,7 +3,9 @@
 interface
 
 uses
-  WinApi.Windows , System.Classes, System.SysUtils, JvHidControllerClass;
+  WinApi.Windows,
+  System.Classes, System.SysUtils,
+  JvHidControllerClass;
 
 type
   TBUFF = array [0..9] of byte;
