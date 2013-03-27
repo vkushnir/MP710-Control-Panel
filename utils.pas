@@ -1,9 +1,9 @@
-unit utils;
+  unit Utils;
 
 interface
 
 uses
-  JvHidControllerClass, WinApi.Windows , System.Classes, System.SysUtils;
+  WinApi.Windows , System.Classes, System.SysUtils, JvHidControllerClass;
 
 type
   TBUFF = array [0..9] of byte;
@@ -14,7 +14,7 @@ type
   end;
 
   THidDevice = record
-    ID: Integer;
+    ID: DWORD;
     HID: TJvHidDevice;
   end;
 
@@ -26,6 +26,9 @@ type
   function GetMP710PORTkkEnabled(ID: DWORD; N: Byte; var Value: Boolean): Boolean;
 
   function GetDeviceIndex (ID: DWORD): Integer;
+
+  procedure InitializeUtils;
+  procedure FinalizeUtils;
 
 var
   EvHandler: TEventHandlers;
@@ -127,6 +130,7 @@ begin
     mov [esi + 4], eax
     mov [esi + 8], al
   end;
+  FillChar(BUFI, 9, #0);
 end;
 function SetMP710PORTkk(ID: DWORD; N, REG, COM: Byte; CMD, PRG: Word): Boolean;
 var
@@ -184,6 +188,9 @@ begin
       end;
     Dec(i);
   end;
+
+  if not Result then
+    frmMain.sInfo('Set to M710[' + IntToStr(ID) + ']:' + IntToStr(N) + ' failed !!!');
 end;
 function GetMP710PORTkk(ID: DWORD; N: Byte; var REG, COM: Byte; var CMD, PRG: Word): Boolean;
 var
@@ -237,23 +244,16 @@ begin
       end;
     Dec(i);
   end;
+
+  if not Result then
+    frmMain.sInfo('Get from M710[' + IntToStr(ID) + ']:' + IntToStr(N) + ' failed !!!');
 end;
 function SetMP710PORTkkEnabled(ID: DWORD; N: Byte; Value: Boolean): Boolean;
 var
   REG, COM: Byte;
   CMD, PRG: Word;
-  HidDev: TJvHidDevice;
 begin
-  Result := False;
-
-{  for i := Low(MP710) to High(MP710) do begin
-    if MP710[i].ID = ID then begin
-      hID := i;
-      Break;
-    end;
-    frmMain.sInfo('Device MP710[' + IntToStr(ID) + '] not found !!!', 2);
-    Exit;
-  end;}
+  //Result := False;
 
   REG := Ord(Value) shl 7;
   COM := 0;
@@ -265,18 +265,8 @@ function GetMP710PORTkkEnabled(ID: DWORD; N: Byte; var Value: Boolean): Boolean;
 var
   REG, COM: Byte;
   CMD, PRG: Word;
-  HidDev: TJvHidDevice;
 begin
-  Result := False;
-
-{  for i := Low(MP710) to High(MP710) do begin
-    if MP710[i].ID = ID then begin
-      hID := i;
-      Break;
-    end;
-    frmMain.sInfo('Device MP710[' + IntToStr(ID) + '] not found !!!', 2);
-    Exit;
-  end; }
+  //Result := False;
 
   Result := GetMP710PORTkk(ID, N, REG, COM, CMD, PRG);
   Value := REG > 64;
@@ -293,17 +283,34 @@ begin
       Break;
     end;
   if Result < 0 then
-    frmMain.sInfo('Device MP710[' + IntToStr(ID) + '] not found !!!', 2);
+    frmMain.sInfo('Device MP710[' + IntToStr(ID) + '] not found !!!');
 end;
 
-initialization
-  HID := TJvHidDeviceController.Create(nil);
-  HID.OnArrival := EvHandler.HIDArrival;
-  HID.OnRemoval := EvHandler.HIDRemoval;
-
-finalization
+procedure InitializeUtils;
+begin
+  if not Assigned(HID) then begin
+    HID := TJvHidDeviceController.Create(frmMain);
+    HID.OnArrival := EvHandler.HIDArrival;
+    HID.OnRemoval := EvHandler.HIDRemoval;
+  end;
+end;
+procedure FinalizeUtils;
+var
+  i: Integer;
+begin
   for i := Low(MP710) to High(MP710) do
     if Assigned(MP710[i].HID) then
       MP710[i].HID.Free;
   if Assigned(HID) then HID.Free;
+end;
+initialization
+//  HID := TJvHidDeviceController.Create(nil);
+//  HID.OnArrival := EvHandler.HIDArrival;
+//  HID.OnRemoval := EvHandler.HIDRemoval;
+
+finalization
+//  for i := Low(MP710) to High(MP710) do
+//    if Assigned(MP710[i].HID) then
+//      MP710[i].HID.Free;
+//  if Assigned(HID) then HID.Free;
 end.

@@ -9,6 +9,5 @@ __history
 *.dll
 *.ini
 bin/*
-Win32/*
-res/*
+Win32/Debug/*
 Images/*

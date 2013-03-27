@@ -31,15 +31,7 @@ object frmMain: TfrmMain
     Height = 284
     Align = alClient
     BevelOuter = bvNone
-    Caption = 'pDevices'
     TabOrder = 1
-    object Image1: TImage
-      Left = 144
-      Top = 128
-      Width = 105
-      Height = 105
-      OnClick = ButtonClick
-    end
   end
   object pControls: TPanel
     Left = 0
@@ -61,7 +53,7 @@ object frmMain: TfrmMain
     Top = 16
   end
   object tsbInfo: TTimer
-    Tag = 1000
+    Tag = 500
     Enabled = False
     OnTimer = tsbInfoTimer
     Left = 8
