@@ -35,7 +35,7 @@ type
     Size: TSize;
     Title: String;
     ImageName: TImageName;
-    GroupID: Integer;
+    GroupID1, GroupID2: Integer;
     DeviceID: Integer;
     DevicePort: Byte;
     PrevDeviceID: Integer;
@@ -90,7 +90,8 @@ const
   iHSpan = 'HSpan';
   iLeft = 'Column';
   iTop = 'Row';
-  iGroup = 'GroupID';
+  iGroup1 = 'GroupID1';
+  iGroup2 = 'GroupID2';
   iDevID = 'DeviceID';
   iDevPort = 'DevicePort';
   iPDevID = 'PrevDeviceID';
@@ -194,7 +195,8 @@ begin
         Size.Width := cfg.ReadInteger(S, iHSpan, 1);
         Size.Height := cfg.ReadInteger(S, iVSpan, 1);
         Title := cfg.ReadString(S, iTitle, S);
-        GroupID := cfg.ReadInteger(S, iGroup, 0);
+        GroupID1 := cfg.ReadInteger(S, iGroup1, 0);
+        GroupID2 := cfg.ReadInteger(S, iGroup2, 0);
         DeviceID := cfg.ReadInteger(S, iDevID, 0);
         DevicePort := cfg.ReadInteger(S, iDevPort, 0);
         PrevDeviceID := cfg.ReadInteger(S, iPDevID, 0);
@@ -282,60 +284,82 @@ var
   n, i, g, p: Integer;
   Val: Boolean;
   ID, PORT: Integer;
+
 begin
 WindowLocked := LockWindowUpdate(frmMain.Handle);
 try
-  n := (Sender as TControl).Tag;
-  g := AItems[n].GroupID;
+  p := -1;
 
+  n := (Sender as TControl).Tag;
   ID := AItems[n].DeviceID;
   PORT := AItems[n].DevicePort;
+
   GetMP710PORTkkEnabled(ID, PORT, VAL);
+  Val := not Val;
 
-  case AGroups[g] of
-    gmFree, gmSame:
-      Val := not Val;
-    gmSingleOn:
-      Val := True;
-    gmSingleOff:
-      Val := False;
-  end;
-
-  if (AItems[n].PrevDeviceID > 0) and (AItems[n].PrevPort > 0) then begin
-    p := -1;
+  // Check if Prev
+  if AItems[n].PrevDeviceID > 0 then begin
     for i := Low(AItems) to High(AItems) do
       if (AItems[i].DeviceID = AItems[n].PrevDeviceID) and
          (AItems[i].DevicePort = AItems[n].PrevPort) then begin
         p := i;
         Break;
       end;
-    if p > 0 then begin
-      SetItem(p, AItems[n].PrevPortState, True);
-      AItems[p].AObject.Update;
-      Sleep(AItems[n].PrevPortTime div 2);
-      SetItem(p, not AItems[n].PrevPortState, True);
-      AItems[p].AObject.Update;
-      Sleep(AItems[n].PrevPortTime div 2);
-    end else begin
-      SetMP710PORTkkEnabled(AItems[n].PrevDeviceID, AItems[n].PrevPort, AItems[n].PrevPortState);
-      Sleep(AItems[n].PrevPortTime div 2);
-      SetMP710PORTkkEnabled(AItems[n].PrevDeviceID, AItems[n].PrevPort, not AItems[n].PrevPortState);
-      Sleep(AItems[n].PrevPortTime div 2);
+      if p > 0 then begin
+        SetItem(p, AItems[n].PrevPortState, True);
+        AItems[p].AObject.Update;
+      end else
+        SetMP710PORTkkEnabled(AItems[n].PrevDeviceID, AItems[n].PrevPort, AItems[n].PrevPortState);
+      Sleep(AItems[n].PrevPortTime div 3);
+  end;
+
+  // Set Group 2
+  g := AItems[n].GroupID2;
+  if AGroups[g] <> gmFree then
+    for i := Low(AItems) to High(AItems) do begin
+      if (i <> n) and (AItems[i].GroupID2 = g) then
+        case AGroups[g] of
+          gmSame:
+            SetItem(i, Val, True);
+          gmSingleOn:
+            SetItem(i, False, True);
+          gmSingleOff:
+            SetItem(i, True, True);
+        end;
     end;
+
+  // Set Group 1
+  g := AItems[n].GroupID1;
+  if AGroups[g] <> gmFree then
+    for i := Low(AItems) to High(AItems) do begin
+      if (i <> n) and (AItems[i].GroupID1 = g) then
+        case AGroups[g] of
+          gmSame:
+            SetItem(i, Val, True);
+          gmSingleOn:
+            SetItem(i, False, True);
+          gmSingleOff:
+            SetItem(i, True, True);
+        end;
+    end;
+
+  // Wait Prev
+  if AItems[n].PrevDeviceID > 0 then begin
+    Sleep(AItems[n].PrevPortTime div 3);
   end;
 
   SetItem(n, Val, True);
 
-  for i := Low(AItems) to High(AItems) do begin
-    if (i <> n) and (AItems[i].GroupID = g) then
-      case AGroups[g] of
-        //gmFree,
-        gmSame:
-          SetItem(i, Val, True);
-        gmSingleOn, gmSingleOff:
-          SetItem(i, not Val, True);
-      end;
+  // Clear Prev
+  if AItems[n].PrevDeviceID > 0 then begin
+    Sleep(AItems[n].PrevPortTime div 3);
+    if p > 0 then begin
+      SetItem(p, not AItems[n].PrevPortState, True);
+      AItems[p].AObject.Update;
+    end else
+      SetMP710PORTkkEnabled(AItems[n].PrevDeviceID, AItems[n].PrevPort, not AItems[n].PrevPortState);
   end;
+
 finally
   if WindowLocked then
     LockWindowUpdate(0);
@@ -451,3 +475,4 @@ begin
 end;
 
 end.
+
